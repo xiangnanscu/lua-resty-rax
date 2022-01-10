@@ -16,6 +16,15 @@ ngx.say(rx:match("/user/xiangnan/age/not_matched", "GET"))
 local data, matched = rx:match("/user/xiangnan/age/22", "GET", {})
 ngx.say(data, ':',matched.name, ':',matched.age)
 ```
+output:
+```
+/hello
+/user/:name
+/user/:name/age/:age
+nil
+nil
+/user/:name/age/:age:xiangnan:22
+```
 # install
 If you install openresty in `/usr/local/openresty`, then:
 ```
