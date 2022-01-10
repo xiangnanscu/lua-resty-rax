@@ -1,7 +1,7 @@
 # lua-resty-rax
 High performance router for openresty web (trim [lua-resty-radixtree](https://github.com/api7/lua-resty-radixtree) for web framework)
 # Synopsis
-```
+```lua
 local radix = require("resty.rax")
 local rx = radix.new({
   {paths = {"/user/:name/age/:age(\\d+)"}, metadata = "/user/:name/age/:age", methods = {'GET', 'POST'}},
