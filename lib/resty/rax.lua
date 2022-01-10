@@ -112,7 +112,7 @@ for i, name in ipairs({"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS
   -- ngx.log(ngx.WARN, "name: ", name, " val: ", METHODS[name])
 end
 
-local _M = {_VERSION = 1.7}
+local _M = {_VERSION = 1.0}
 
 -- expose radix tree api for test
 _M._symbols = radix
