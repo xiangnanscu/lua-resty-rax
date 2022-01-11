@@ -177,6 +177,43 @@ local function insert_route(self, opts)
   return true
 end
 
+local function fetch_pat(path)
+  local res = ngx_re.split(path, "/", "jo")
+  if not res then
+    return false
+  end
+  local names = {}
+  for i, item in ipairs(res) do
+    local name = res[i]:sub(2)
+    local first_byte = item:byte(1, 1)
+    if first_byte == string.byte("#") then
+      table.insert(names, name)
+      res[i] = [=[(\d+)]=]
+    elseif first_byte == string.byte("@") then
+      table.insert(names, name)
+      res[i] = [=[(\w+)]=]
+    elseif first_byte == string.byte(":") then
+      -- first check users/:id(\\d+) stuff
+      local user_re = re_match(res[i], [=[^:(\w+)\((.+?)\)$]=], 'jo')
+      if user_re then
+        table.insert(names, user_re[1])
+        res[i] = format([=[(%s)]=], user_re[2])
+      else
+        table.insert(names, name)
+        -- See https://www.rfc-editor.org/rfc/rfc1738.txt BNF for specific URL schemes
+        res[i] = [=[([\w\-_;:@&=!',\%\$\.\+\*\(\)]+)]=]
+      end
+    elseif first_byte == string.byte("*") then
+      if name == "" then
+        name = ":ext"
+      end
+      table.insert(names, name)
+      res[i] = [=[(.*)]=]
+    end
+  end
+  local pat = table.concat(res, [[\/]])
+  return pat, names
+end
 local function pre_insert_route(path, route)
   local route_opts = {}
   if type(path) ~= "string" then
@@ -223,50 +260,10 @@ local function pre_insert_route(path, route)
   route_opts.metadata = route.metadata
   route_opts.method = bit_methods
   route_opts.priority = route.priority or 0
+  if route_opts.param then
+    route_opts.re_pat, route_opts.re_names = fetch_pat(route_opts.path_org)
+  end
   return route_opts
-end
-local lru_pat = {}
-local function fetch_pat(path)
-  local pat = lru_pat[path]
-  if pat then
-    return pat[1], pat[2] -- pat, names
-  end
-  local res = ngx_re.split(path, "/", "jo")
-  if not res then
-    return false
-  end
-  local names = {}
-  for i, item in ipairs(res) do
-    local name = res[i]:sub(2)
-    local first_byte = item:byte(1, 1)
-    if first_byte == string.byte("#") then
-      table.insert(names, name)
-      res[i] = [=[(\d+)]=]
-    elseif first_byte == string.byte("@") then
-      table.insert(names, name)
-      res[i] = [=[(\w+)]=]
-    elseif first_byte == string.byte(":") then
-      -- first check users/:id(\\d+) stuff
-      local user_re = re_match(res[i], [=[^:(\w+)\((.+?)\)$]=], 'jo')
-      if user_re then
-        table.insert(names, user_re[1])
-        res[i] = format([=[(%s)]=], user_re[2])
-      else
-        table.insert(names, name)
-        -- See https://www.rfc-editor.org/rfc/rfc1738.txt BNF for specific URL schemes
-        res[i] = [=[([\w\-_;:@&=!',\%\$\.\+\*\(\)]+)]=]
-      end
-    elseif first_byte == string.byte("*") then
-      if name == "" then
-        name = ":ext"
-      end
-      table.insert(names, name)
-      res[i] = [=[(.*)]=]
-    end
-  end
-  pat = table.concat(res, [[\/]])
-  lru_pat[path] = {pat, names}
-  return pat, names
 end
 
 local function compare_param(req_path, route, matched)
@@ -274,8 +271,8 @@ local function compare_param(req_path, route, matched)
     return true
   end
 
-  local pat, names = fetch_pat(route.path_org)
-
+  local pat = route.re_pat
+  local names = route.re_names
   if #names == 0 then
     return true
   end
@@ -405,7 +402,11 @@ function _M.match(self, path, method, matched)
     end
     return nil
   end
-  return route.metadata, matched
+  if matched then
+    return route.metadata, matched
+  else
+    return route.metadata
+  end
 end
 
 function _M.free(self)
