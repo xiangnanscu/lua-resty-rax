@@ -1,4 +1,4 @@
-INST_PREFIX ?= /usr
+INST_PREFIX ?= /usr/local/openresty/luajit
 INST_LIBDIR ?= $(INST_PREFIX)/lib/lua/5.1
 INST_LUADIR ?= $(INST_PREFIX)/share/lua/5.1
 INSTALL ?= install
@@ -9,14 +9,14 @@ LUAJIT_DIR ?= $(shell ${OR_EXEC} -V 2>&1 | grep prefix | grep -Eo 'prefix=(.*)/n
 
 CFLAGS := -O2 -g -Wall -fpic -std=c99 -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast
 
-C_SO_NAME := librestyradixtree.so
+C_SO_NAME := rax.so
 LDFLAGS := -shared
 
 # on Mac OS X, one should set instead:
 # for Mac OS X environment, use one of options
 ifeq ($(UNAME),Darwin)
 	LDFLAGS := -bundle -undefined dynamic_lookup
-	C_SO_NAME := librestyradixtree.dylib
+	C_SO_NAME := rax.dylib
 endif
 
 MY_CFLAGS := $(CFLAGS) -DBUILDING_SO
@@ -57,6 +57,7 @@ ${C_SO_NAME} : ${OBJS}
 install:
 	$(INSTALL) -d $(INST_LUADIR)/resty/
 	$(INSTALL) lib/resty/*.lua $(INST_LUADIR)/resty/
+	$(INSTALL) -d $(INST_LIBDIR)/
 	$(INSTALL) $(C_SO_NAME) $(INST_LIBDIR)/
 
 

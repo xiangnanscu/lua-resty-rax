@@ -19,32 +19,31 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 --
-local base = require("resty.core.base")
-local clone_tab = require("table.clone")
-local bit = require("bit")
-local ngx = ngx
-local table = table
-local new_tab = base.new_tab
-local move_tab = table.move
-local tonumber = tonumber
-local ipairs = ipairs
-local ffi = require("ffi")
-local ffi_cast = ffi.cast
-local ffi_cdef = ffi.cdef
-local insert_tab = table.insert
-local string = string
-local io = io
-local package = package
+local base         = require("resty.core.base")
+local clone_tab    = require("table.clone")
+local bit          = require("bit")
+local ngx          = ngx
+local table        = table
+local new_tab      = base.new_tab
+local move_tab     = table.move
+local tonumber     = tonumber
+local ipairs       = ipairs
+local ffi          = require("ffi")
+local C            = ffi.C
+local ffi_cast     = ffi.cast
+local ffi_cdef     = ffi.cdef
+local insert_tab   = table.insert
+local string       = string
 local getmetatable = getmetatable
 local setmetatable = setmetatable
-local type = type
-local error = error
-local newproxy = newproxy
-local re_match = ngx.re.match
-local ngx_re = require("ngx.re")
-local empty_table = {}
-local str_find = string.find
-local format = string.format
+local type         = type
+local error        = error
+local newproxy     = newproxy
+local re_match     = ngx.re.match
+local ngx_re       = require("ngx.re")
+local empty_table  = {}
+local str_find     = string.find
+local format       = string.format
 
 setmetatable(empty_table, {
   __newindex = function()
@@ -63,32 +62,23 @@ local function load_shared_lib(so_name)
   local i = 1
 
   for k, _ in string_gmatch(cpath, "[^;]+") do
-    local fpath = string_match(k, "(.*/)")
-    fpath = fpath .. so_name
-    -- Don't get me wrong, the only way to know if a file exist is trying
-    -- to open it.
-    local f = io_open(fpath)
-    if f ~= nil then
-      io_close(f)
-      return ffi.load(fpath)
+      local fpath = string_match(k, "(.*/)")
+      fpath = fpath .. so_name
+      -- Don't get me wrong, the only way to know if a file exist is trying
+      -- to open it.
+      local f = io_open(fpath)
+      if f ~= nil then
+          io_close(f)
+          return ffi.load(fpath)
+      end
+      tried_paths[i] = fpath
+      i = i + 1
     end
-    tried_paths[i] = fpath
-    i = i + 1
-  end
-
-  return nil, tried_paths
-end
-
-local lib_name = "librestyradixtree.so"
-if ffi.os == "OSX" then
-  lib_name = "librestyradixtree.dylib"
-end
-
-local radix, tried_paths = load_shared_lib(lib_name)
-if not radix then
-  tried_paths[#tried_paths + 1] = 'tried above paths but can not load ' .. lib_name
+  
   error(table.concat(tried_paths, '\r\n', 1, #tried_paths))
 end
+
+local radix = load_shared_lib('rax.so')
 
 ffi_cdef [[
     int memcmp(const void *s1, const void *s2, size_t n);
@@ -107,12 +97,12 @@ ffi_cdef [[
 ]]
 
 local METHODS = {}
-for i, name in ipairs({"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "CONNECT", "TRACE"}) do
+for i, name in ipairs({ "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "CONNECT", "TRACE" }) do
   METHODS[name] = bit.lshift(1, i - 1)
   -- ngx.log(ngx.WARN, "name: ", name, " val: ", METHODS[name])
 end
 
-local _M = {_VERSION = 1.0}
+local _M = { _VERSION = 1.0 }
 
 -- expose radix tree api for test
 _M._symbols = radix
@@ -135,7 +125,7 @@ local function gc_free(self)
   self:free()
 end
 
-local mt = {__index = _M, __gc = gc_free}
+local mt = { __index = _M, __gc = gc_free }
 
 local function sort_route(route_a, route_b)
   return (route_a.priority or 0) > (route_b.priority or 0)
@@ -171,7 +161,7 @@ local function insert_route(self, opts)
   end
 
   self.match_data_index = self.match_data_index + 1
-  self.match_data[self.match_data_index] = {opts}
+  self.match_data[self.match_data_index] = { opts }
 
   radix.radix_tree_insert(self.tree, path, #path, self.match_data_index)
   return true
@@ -214,6 +204,7 @@ local function fetch_pat(path)
   local pat = table.concat(res, [[\/]])
   return pat, names
 end
+
 local function pre_insert_route(path, route)
   local route_opts = {}
   if type(path) ~= "string" then
@@ -413,7 +404,7 @@ function _M.free(self)
   local it = self.tree_it
   if it then
     radix.radix_tree_stop(it)
-    ffi.C.free(it)
+    C.free(it)
     self.tree_it = nil
   end
 

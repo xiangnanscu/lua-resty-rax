@@ -28,8 +28,7 @@ nil
 # install
 If you install openresty in `/usr/local/openresty`, then:
 ```
-opm get xiangnanscu/lua-resty-rax
-git clone https://github.com/xiangnanscu/lua-resty-rax.git
+git clone https://github.com/xiangnanscu/lua-resty-rax.git --depth=1
 cd lua-resty-rax
-make && INST_PREFIX=/usr/local/openresty/luajit make install
+make && INST_PREFIX=/usr/local/openresty/luajit make install && make clean
 ```
