@@ -1,0 +1,22 @@
+{
+  "name": "lua-resty-rax",
+  "version": "1.0.0",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "push": "git add . && git commit -am \"${msg:-push}\" && git push origin master",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xiangnanscu/lua-resty-rax.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/xiangnanscu/lua-resty-rax/issues"
+  },
+  "homepage": "https://github.com/xiangnanscu/lua-resty-rax#readme"
+}

@@ -26,7 +26,10 @@ nil
 /user/:name/age/:age:xiangnan:22
 ```
 # install
-If you install openresty in `/usr/local/openresty`, then:
+```sh
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/xiangnanscu/lua-resty-rax/main/install.sh)"
+```
+command above assumes you install openresty in `/usr/local/openresty`, in fact its content is:
 ```
 git clone https://github.com/xiangnanscu/lua-resty-rax.git --depth=1
 cd lua-resty-rax
