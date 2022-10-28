@@ -9,14 +9,14 @@ LUAJIT_DIR ?= $(shell ${OR_EXEC} -V 2>&1 | grep prefix | grep -Eo 'prefix=(.*)/n
 
 CFLAGS := -O2 -g -Wall -fpic -std=c99 -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast
 
-C_SO_NAME := rax.so
+C_SO_NAME := librax.so
 LDFLAGS := -shared
 
 # on Mac OS X, one should set instead:
 # for Mac OS X environment, use one of options
 ifeq ($(UNAME),Darwin)
 	LDFLAGS := -bundle -undefined dynamic_lookup
-	C_SO_NAME := rax.dylib
+	C_SO_NAME := librax.dylib
 endif
 
 MY_CFLAGS := $(CFLAGS) -DBUILDING_SO
