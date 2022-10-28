@@ -74,11 +74,11 @@ local function load_shared_lib(so_name)
       tried_paths[i] = fpath
       i = i + 1
     end
-  
+
   error(table.concat(tried_paths, '\r\n', 1, #tried_paths))
 end
 
-local radix = load_shared_lib('rax.so')
+local radix = load_shared_lib('librax.so')
 
 ffi_cdef [[
     int memcmp(const void *s1, const void *s2, size_t n);
@@ -166,55 +166,50 @@ local function insert_route(self, opts)
   radix.radix_tree_insert(self.tree, path, #path, self.match_data_index)
   return true
 end
+local tmp = {}
+local lru_pat, err = lrucache.new(1000)
+if not lru_pat then
+    error("failed to generate new lru object: " .. err)
+end
 
 local function fetch_pat(path)
-  local res = ngx_re.split(path, "/", "jo")
-  if not res then
-    return false
+  local pat = lru_pat:get(path)
+  if pat then
+      return pat[1], pat[2]   -- pat, names
   end
+
+  clear_tab(tmp)
+  local res = ngx_re.split(path, "/", "jo", nil, nil, tmp)
+  if not res then
+      return false
+  end
+
   local names = {}
   for i, item in ipairs(res) do
-    local name = res[i]:sub(2)
-    local first_byte = item:byte(1, 1)
-    if first_byte == string.byte("#") then
-      table.insert(names, name)
-      res[i] = [=[(\d+)]=]
-    elseif first_byte == string.byte("@") then
-      table.insert(names, name)
-      res[i] = [=[(\w+)]=]
-    elseif first_byte == string.byte(":") then
-      -- first check users/:id(\\d+) stuff
-      local user_re = re_match(res[i], [=[^:(\w+)\((.+?)\)$]=], 'jo')
-      if user_re then
-        table.insert(names, user_re[1])
-        res[i] = format([=[(%s)]=], user_re[2])
-      else
-        table.insert(names, name)
-        -- See https://www.rfc-editor.org/rfc/rfc1738.txt BNF for specific URL schemes
-        res[i] = [=[([\w\-_;:@&=!',\%\$\.\+\*\(\)]+)]=]
+      local first_byte = item:byte(1, 1)
+      if first_byte == string.byte(":") then
+          table.insert(names, res[i]:sub(2))
+          -- See https://www.rfc-editor.org/rfc/rfc1738.txt BNF for specific URL schemes
+          res[i] = [=[([\w\-_;:@&=!',\%\$\.\+\*\(\)]+)]=]
+
+      elseif first_byte == string.byte("*") then
+          local name = res[i]:sub(2)
+          if name == "" then
+              name = ":ext"
+          end
+          table.insert(names, name)
+          -- '.' matches any character except newline
+          res[i] = [=[((.|\n)*)]=]
       end
-    elseif first_byte == string.byte("*") then
-      if name == "" then
-        name = ":ext"
-      end
-      table.insert(names, name)
-      res[i] = [=[(.*)]=]
-    end
   end
-  local pat = table.concat(res, [[\/]])
+
+  pat = table.concat(res, [[\/]])
+  lru_pat:set(path, {pat, names}, 60 * 60)
   return pat, names
 end
 
 local function pre_insert_route(path, route)
   local route_opts = {}
-  if type(path) ~= "string" then
-    error("invalid argument path", 2)
-  end
-
-  if type(route.metadata) == "nil" then
-    error("missing argument metadata", 2)
-  end
-
   local method = route.methods
   local bit_methods
   if type(method) ~= "table" then
@@ -229,7 +224,7 @@ local function pre_insert_route(path, route)
   route_opts.path_org = path
   route_opts.param = false
 
-  local pos = str_find(path, '[:#@]', 1)
+  local pos = str_find(path, ':', 1, true)
   if pos then
     path = path:sub(1, pos - 1)
     route_opts.path_op = "<="
