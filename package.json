@@ -7,7 +7,8 @@
   },
   "scripts": {
     "push": "git add . && git commit -am \"${msg:-push}\" && git push origin main",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "i": "make && INST_PREFIX=/usr/local/openresty make install && make clean",
+    "test": "resty -I 'lib' test.lua"
   },
   "repository": {
     "type": "git",

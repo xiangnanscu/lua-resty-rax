@@ -1,6 +1,6 @@
-INST_PREFIX ?= /usr/local/openresty/luajit
-INST_LIBDIR ?= $(INST_PREFIX)/lib/lua/5.1
-INST_LUADIR ?= $(INST_PREFIX)/share/lua/5.1
+INST_PREFIX ?= /usr/local/openresty
+INST_LIBDIR ?= $(INST_PREFIX)/lualib
+INST_LUADIR ?= $(INST_PREFIX)/site/lualib
 INSTALL ?= install
 UNAME ?= $(shell uname)
 OR_EXEC ?= $(shell which openresty)

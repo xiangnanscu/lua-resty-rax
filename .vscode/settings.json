@@ -6,5 +6,9 @@
   "Lua.workspace.library": [
     "${3rd}/OpenResty/library"
   ],
-  "Lua.workspace.checkThirdParty": false
+  "Lua.workspace.checkThirdParty": false,
+  "Lua.diagnostics.disable": [
+    "spell-check",
+    "deprecated"
+  ]
 }
