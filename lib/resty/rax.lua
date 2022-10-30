@@ -30,6 +30,8 @@ local new_tab      = base.new_tab
 local tonumber     = tonumber
 local ipairs       = ipairs
 local ffi          = require("ffi")
+---@class C
+---@field free function
 local C            = ffi.C
 local ffi_cast     = ffi.cast
 local ffi_cdef     = ffi.cdef
@@ -273,13 +275,14 @@ end
 ---comment
 ---@param self Radix
 ---@param path string
----@param route {metadata: any,  methods?: string}
+---@param route {metadata: any,  methods?: string|string[]}
 ---@return boolean
 function Radix.insert(self, path, route)
   ---@type route_opts
   local route_opts = {
     path_origin = path,
     param = false,
+    metadata = route.metadata
   }
   local method = route.methods
   local bit_methods
@@ -291,11 +294,12 @@ function Radix.insert(self, path, route)
       bit_methods = bit.bor(bit_methods, METHODS_BITS[m])
     end
   end
+  route_opts.method = bit_methods
 
   local pos = str_find(path, '[:#]', 1)
   if pos then
     path = path:sub(1, pos - 1)
-    -- route_opts.path_op = "<="
+    route_opts.path_op = "<="
     route_opts.path = path
     route_opts.param = true
   else
@@ -305,14 +309,14 @@ function Radix.insert(self, path, route)
         route_opts.param = true
       end
       path = path:sub(1, pos - 1)
-      -- route_opts.path_op = "<="
+      route_opts.path_op = "<="
     else
-      -- route_opts.path_op = "="
+      route_opts.path_op = "="
     end
     route_opts.path = path
   end
-  route_opts.metadata = route.metadata
-  route_opts.method = bit_methods
+
+
   -- route_opts.priority = route.priority or 0
   -- move fetch_pat to insert
   if route_opts.param then
@@ -320,7 +324,7 @@ function Radix.insert(self, path, route)
   end
 
   route_opts = clone_tab(route_opts)
-  if route_opts.param == false then
+  if route_opts.path_op == "=" then
     self.hash_path[path] = route_opts
     return true
   end
@@ -343,10 +347,11 @@ function Radix.insert(self, path, route)
   return true
 end
 
+
 function Radix.match(self, path, method, matched)
   local route = self.hash_path[path]
-  if route then
-    return route
+  if route and match_route_method(route, method) then
+    return route.metadata
   end
 
   local it = radix_c.radix_tree_search(self.tree, self.tree_it, path, #path)
