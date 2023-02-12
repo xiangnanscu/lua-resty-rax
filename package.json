@@ -8,7 +8,7 @@
   "scripts": {
     "push": "git add . && git commit -am \"${msg:-push}\" && git push origin main",
     "i": "make && INST_PREFIX=/usr/local/openresty make install && make clean",
-    "test": "resty -I 'lib' test.lua"
+    "test": "resty test.lua"
   },
   "repository": {
     "type": "git",

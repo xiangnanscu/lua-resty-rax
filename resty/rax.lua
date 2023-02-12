@@ -19,39 +19,37 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 --
-local base         = require("resty.core.base")
-local clone_tab    = require("table.clone")
-local lrucache     = require("resty.lrucache")
-local bit          = require("bit")
-local ngx          = ngx
-local table        = table
-local clear_tab    = base.clear_tab
-local new_tab      = base.new_tab
-local tonumber     = tonumber
-local ipairs       = ipairs
-local ffi          = require("ffi")
+local bit           = require("bit")
+local ngx_re        = require("ngx.re")
+local clone_tab     = require("table.clone")
+local base          = require("resty.core.base")
+local lrucache      = require("resty.lrucache")
+local ffi           = require("ffi")
+local ngx           = ngx
+local table         = table
+local clear_tab     = base.clear_tab
+local new_tab       = base.new_tab
+local tonumber      = tonumber
+local ipairs        = ipairs
 ---@class C
 ---@field free function
-local C            = ffi.C
-local ffi_cast     = ffi.cast
-local ffi_cdef     = ffi.cdef
-local insert_tab   = table.insert
-local string       = string
-local getmetatable = getmetatable
-local setmetatable = setmetatable
-local type         = type
-local error        = error
-local newproxy     = newproxy
-local re_match     = ngx.re.match
-local ngx_re       = require("ngx.re")
-local empty_table  = {}
-local str_find     = string.find
+local C             = ffi.C
+local ffi_cast      = ffi.cast
+local ffi_cdef      = ffi.cdef
+local insert_tab    = table.insert
+local string        = string
+local getmetatable  = getmetatable
+local setmetatable  = setmetatable
+local type          = type
+local error         = error
+local newproxy      = newproxy
+local re_match      = ngx.re.match
+local str_find      = string.find
+local re_split      = ngx_re.split
 
-setmetatable(empty_table, {
-  __newindex = function()
-    error("empty_table can not be changed")
-  end
-})
+local COLON_BYTE    = string.byte(":")
+local ASTERISK_BYTE = string.byte("*")
+local INTEGER_BYTE  = string.byte("#")
 
 local function load_shared_lib(so_name)
   local string_gmatch = string.gmatch
@@ -76,8 +74,7 @@ local function load_shared_lib(so_name)
     tried_paths[i] = fpath
     i = i + 1
   end
-
-  error(table.concat(tried_paths, '\r\n', 1, #tried_paths))
+  error(string.format("can't find %s, tried path:", so_name, table.concat(tried_paths, ',')))
 end
 
 ---@class radix_c
@@ -107,9 +104,7 @@ ffi_cdef [[
     void *radix_tree_new_it(void *t);
 ]]
 
-local COLON_BYTE = string.byte(":")
-local ASTERISK_BYTE = string.byte("*")
-local NUMBER_SIGN_BYTE = string.byte("#")
+
 ---@type {string:number}
 local METHODS_BITS = {}
 for i, name in ipairs({ "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "CONNECT", "TRACE", "PURGE" }) do
@@ -117,12 +112,11 @@ for i, name in ipairs({ "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTION
 end
 
 ---@class Radix
----@field _VERSION number
 ---@field hash_path {string:any}
 ---@field match_data {number:any}
 ---@field tree any
 ---@field tree_it any
-local Radix = { _VERSION = 1.0 }
+local Radix = {}
 
 -- only work under lua51 or luajit
 local function setmt__gc(t, mt)
@@ -145,7 +139,7 @@ end
 local RadixMeta = { __index = Radix, __gc = gc_free }
 local tmp = {}
 local lru_pat = assert(lrucache.new(1000))
----comment
+
 ---@param path string
 ---@return string, string[]
 local function fetch_pat(path)
@@ -154,69 +148,32 @@ local function fetch_pat(path)
     return pat[1], pat[2] -- pat, names
   end
   clear_tab(tmp)
-  local res = assert(ngx_re.split(path, "/", "jo", nil, nil, tmp))
+  local res = re_split(path, "/", "jo", nil, nil, tmp)
+  if not res then
+    error("failed to split path")
+  end
   local names = {}
   for i, item in ipairs(res) do
     local first_byte = item:byte(1, 1)
     if first_byte == COLON_BYTE then
-      table.insert(names, res[i]:sub(2))
-      -- See https://www.rfc-editor.org/rfc/rfc1738.txt BNF for specific URL schemes
+      insert_tab(names, res[i]:sub(2))
       res[i] = [=[([\w\-_;:@&=!',\%\$\.\+\*\(\)]+)]=]
-    elseif first_byte == NUMBER_SIGN_BYTE then
-      table.insert(names, res[i]:sub(2))
+    elseif first_byte == INTEGER_BYTE then
+      insert_tab(names, res[i]:sub(2))
       res[i] = [[(\d+)]]
     elseif first_byte == ASTERISK_BYTE then
       local name = res[i]:sub(2)
       if name == "" then
         name = ":ext"
       end
-      table.insert(names, name)
+      insert_tab(names, name)
       -- '.' matches any character except newline
       res[i] = [=[((.|\n)*)]=]
     end
   end
-
   pat = table.concat(res, [[\/]])
   lru_pat:set(path, { pat, names }, 60 * 60)
   return pat, names
-end
-
----comment
----@param req_path string
----@param route table
----@param matched table
----@return boolean
-local function compare_param(req_path, route, matched)
-  if not matched and not route.param then
-    return true
-  end
-
-  local pat = route.re_pat
-  local names = route.re_names
-  if #names == 0 then
-    return true
-  end
-
-  local captured = re_match(req_path, pat, "jo")
-  if not captured then
-    return false
-  end
-
-  if captured[0] ~= req_path then
-    return false
-  end
-
-  if not matched then
-    return true
-  end
-
-  for i, v in ipairs(captured) do
-    local name = names[i]
-    if name and v then
-      matched[name] = v
-    end
-  end
-  return true
 end
 
 local function match_route_method(route, method)
@@ -239,22 +196,22 @@ function Radix.new(routes)
   end
 
   local self = setmt__gc({
-    tree = tree,
-    tree_it = tree_it,
-    match_data_index = 0,
-    match_data = new_tab(#routes, 0),
-    hash_path = new_tab(0, #routes)
-  }, RadixMeta)
+          tree = tree,
+          tree_it = tree_it,
+          match_data_index = 0,
+          match_data = new_tab(#routes, 0),
+          hash_path = new_tab(0, #routes)
+      }, RadixMeta)
 
   -- register routes
   for i = 1, route_n do
     local route = routes[i]
-    local paths = route.paths
-    if type(paths) == "string" then
-      self:insert(paths, route)
+    local path = route.path
+    if type(path) == "string" then
+      self:insert(path, route)
     else
-      for _, path in ipairs(paths) do
-        self:insert(path, route)
+      for _, p in ipairs(path) do
+        self:insert(p, route)
       end
     end
   end
@@ -263,7 +220,7 @@ function Radix.new(routes)
 end
 
 ---@class route_opts
----@field metadata any
+---@field handler any
 ---@field method integer
 ---@field param boolean
 ---@field path string
@@ -272,27 +229,31 @@ end
 ---@field re_names? string[]
 ---@field re_pat? string
 
----comment
+
 ---@param self Radix
 ---@param path string
----@param route {metadata: any,  methods?: string|string[]}
+---@param route {handler: any,  method?: string|string[]}
 ---@return boolean
 function Radix.insert(self, path, route)
   ---@type route_opts
   local route_opts = {
-    path_origin = path,
-    param = false,
-    metadata = route.metadata
+      path_origin = path,
+      param = false,
+      handler = route.handler
   }
-  local method = route.methods
+  local method = route.method
   local bit_methods
-  if type(method) ~= "table" then
-    bit_methods = method and METHODS_BITS[method] or 0
-  else
+  if not method then
+    bit_methods = 0
+  elseif type(method) == "string" then
+    bit_methods = METHODS_BITS[method:upper()]
+  elseif type(method) == "table" then
     bit_methods = 0
     for _, m in ipairs(method) do
-      bit_methods = bit.bor(bit_methods, METHODS_BITS[m])
+      bit_methods = bit.bor(bit_methods, METHODS_BITS[m:upper()])
     end
+  else
+    error("invalid method type:" .. type(method))
   end
   route_opts.method = bit_methods
 
@@ -315,10 +276,7 @@ function Radix.insert(self, path, route)
     end
     route_opts.path = path
   end
-
-
-  -- route_opts.priority = route.priority or 0
-  -- move fetch_pat to insert
+  -- move fetch_pat to insert, why not? it's fast
   if route_opts.param then
     route_opts.re_pat, route_opts.re_names = fetch_pat(route_opts.path_origin)
   end
@@ -332,7 +290,6 @@ function Radix.insert(self, path, route)
   local data_idx = radix_c.radix_tree_find(self.tree, path, #path)
   if data_idx ~= nil then
     local idx = assert(tonumber(ffi_cast('intptr_t', data_idx)))
-    -- self.match_data[idx] = route_opts
     local routes = self.match_data[idx]
     if routes and routes[1].path == path then
       insert_tab(routes, route_opts)
@@ -347,16 +304,23 @@ function Radix.insert(self, path, route)
   return true
 end
 
-
-function Radix.match(self, path, method, matched)
-  local route = self.hash_path[path]
-  if route and match_route_method(route, method) then
-    return route.metadata
+---@param self Radix
+---@param path string
+---@param method string
+---@return any, (string|table)?
+function Radix.match(self, path, method)
+  local hash_route = self.hash_path[path]
+  if hash_route then
+    if match_route_method(hash_route, method) then
+      return hash_route.handler
+    else
+      return nil, "failed to match"
+    end
   end
 
   local it = radix_c.radix_tree_search(self.tree, self.tree_it, path, #path)
   if not it then
-    return nil, "failed to match"
+    return nil, "failed to search tree"
   end
 
   while true do
@@ -364,19 +328,40 @@ function Radix.match(self, path, method, matched)
     if idx <= 0 then
       break
     end
-
     local routes = self.match_data[idx]
-    for _, r in ipairs(routes) do
-      if match_route_method(r, method) and compare_param(path, r, matched) then
-        if matched then
-          return r.metadata, matched
-        else
-          return r.metadata
+    if routes then
+      for _, route in ipairs(routes) do
+        local handler = route.handler
+        if match_route_method(route, method) then
+          if not route.param then
+            return handler
+          end
+          local pat = route.re_pat
+          local names = route.re_names
+          if #names == 0 then
+            return handler
+          end
+          local captured = re_match(path, pat, "jo")
+          if not captured then
+            goto continue
+          end
+          if captured[0] ~= path then
+            goto continue
+          end
+          local matched = {}
+          for i, v in ipairs(captured) do
+            local name = names[i]
+            if name and v then
+              matched[name] = v
+            end
+          end
+          return handler, matched
         end
+        ::continue::
       end
     end
   end
-
+  return nil, "failed to match"
 end
 
 function Radix.free(self)

@@ -1,29 +1,28 @@
 # lua-resty-rax
-High performance router for openresty web (trim [lua-resty-radixtree](https://github.com/api7/lua-resty-radixtree) for web framework)
+High performance router for openresty web, focus on mapping string to hanlder.
 # Synopsis
 ```lua
 local radix = require("resty.rax")
 local rx = radix.new({
-  {paths = {"/user/:name/age/:age(\\d+)"}, metadata = "/user/:name/age/:age", methods = {'GET', 'POST'}},
-  {paths = {"/user/:name"}, metadata = "/user/:name"}
-})
-rx:insert("/hello", {metadata = "/hello", methods = 'GET'})
+        { path = { "/user/:name/age/#age" }, handler = "/user/:name/age/:age", method = { 'GET', 'POST' } },
+        { path = { "/user/:name" },          handler = "/user/:name" }
+    })
+rx:insert("/hello", { handler = "/hello", method = 'GET' })
+-- test matching
 ngx.say(rx:match("/hello"))
 ngx.say(rx:match("/user/xiangnan"))
-ngx.say(rx:match("/user/xiangnan/age/22", "GET"))
+local data, matched = rx:match("/user/xiangnan/age/22", "GET")
+ngx.say(data, ':', matched.name, ':', matched.age)
 ngx.say(rx:match("/user/xiangnan/age/22", "PUT"))
 ngx.say(rx:match("/user/xiangnan/age/not_matched", "GET"))
-local data, matched = rx:match("/user/xiangnan/age/22", "GET", {})
-ngx.say(data, ':',matched.name, ':',matched.age)
 ```
 output:
 ```
-/hello
+nilfailed to match
 /user/:name
-/user/:name/age/:age
-nil
-nil
 /user/:name/age/:age:xiangnan:22
+nilfailed to match
+nilfailed to match
 ```
 # install
 ```sh
