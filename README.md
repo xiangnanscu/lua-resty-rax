@@ -26,11 +26,11 @@ nilfailed to match
 ```
 # install
 ```sh
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/xiangnanscu/lua-resty-rax/main/install.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/xiangnanscu/lua-resty-rax/main/install.sh)"
 ```
 command above assumes you install openresty in `/usr/local/openresty`, in fact its content is:
 ```
 git clone https://github.com/xiangnanscu/lua-resty-rax.git --depth=1
 cd lua-resty-rax
-make && INST_PREFIX=/usr/local/openresty/luajit make install && make clean
+make && make install && make clean
 ```
