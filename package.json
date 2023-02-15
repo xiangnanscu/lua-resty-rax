@@ -6,6 +6,7 @@
     "lib": "lib"
   },
   "scripts": {
+    "upload": "opm upload && opm clean dist",
     "push": "git add . && git commit -am \"${msg:-push}\" && git push origin main",
     "i": "make && INST_PREFIX=/usr/local/openresty make install && make clean",
     "test": "resty test.lua"
