@@ -186,6 +186,8 @@ local function match_route_method(route, method)
   return true
 end
 
+---@param routes? {path: string|string[], handler: any,  method?: string|string[]}[]
+---@return Radix
 function Radix.new(routes)
   local route_n = #routes
 
@@ -196,12 +198,12 @@ function Radix.new(routes)
   end
 
   local self = setmt__gc({
-          tree = tree,
-          tree_it = tree_it,
-          match_data_index = 0,
-          match_data = new_tab(#routes, 0),
-          hash_path = new_tab(0, #routes)
-      }, RadixMeta)
+    tree = tree,
+    tree_it = tree_it,
+    match_data_index = 0,
+    match_data = new_tab(#routes, 0),
+    hash_path = new_tab(0, #routes)
+  }, RadixMeta)
 
   -- register routes
   for i = 1, route_n do
@@ -237,9 +239,9 @@ end
 function Radix.insert(self, path, route)
   ---@type route_opts
   local route_opts = {
-      path_origin = path,
-      param = false,
-      handler = route.handler
+    path_origin = path,
+    param = false,
+    handler = route.handler
   }
   local method = route.method
   local bit_methods
@@ -306,21 +308,21 @@ end
 
 ---@param self Radix
 ---@param path string
----@param method string
----@return any, (string|table)?
+---@param method? string
+---@return any, (string|table)?, number?
 function Radix.match(self, path, method)
   local hash_route = self.hash_path[path]
   if hash_route then
     if match_route_method(hash_route, method) then
       return hash_route.handler
     else
-      return nil, "failed to match"
+      return nil, "method not allowed", 405
     end
   end
 
   local it = radix_c.radix_tree_search(self.tree, self.tree_it, path, #path)
   if not it then
-    return nil, "failed to search tree"
+    return nil, "tree iterator error"
   end
 
   while true do
@@ -361,7 +363,7 @@ function Radix.match(self, path, method)
       end
     end
   end
-  return nil, "failed to match"
+  return nil, "page not found", 404
 end
 
 function Radix.free(self)
