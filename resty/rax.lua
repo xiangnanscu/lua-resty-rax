@@ -21,13 +21,10 @@
 --
 local bit           = require("bit")
 local ngx_re        = require("ngx.re")
-local clone_tab     = require("table.clone")
 local base          = require("resty.core.base")
-local lrucache      = require("resty.lrucache")
 local ffi           = require("ffi")
 local ngx           = ngx
 local table         = table
-local clear_tab     = base.clear_tab
 local new_tab       = base.new_tab
 local tonumber      = tonumber
 local ipairs        = ipairs
@@ -36,7 +33,8 @@ local ipairs        = ipairs
 local C             = ffi.C
 local ffi_cast      = ffi.cast
 local ffi_cdef      = ffi.cdef
-local insert_tab    = table.insert
+local table_insert  = table.insert
+local table_concat  = table.concat
 local string        = string
 local getmetatable  = getmetatable
 local setmetatable  = setmetatable
@@ -74,7 +72,7 @@ local function load_shared_lib(so_name)
     tried_paths[i] = fpath
     i = i + 1
   end
-  error(string.format("can't find %s, tried path:", so_name, table.concat(tried_paths, ',')))
+  error(string.format("can't find %s, tried path:", so_name, table_concat(tried_paths, ',')))
 end
 
 ---@class radix_c
@@ -137,18 +135,11 @@ local function gc_free(self)
 end
 
 local RadixMeta = { __index = Radix, __gc = gc_free }
-local tmp = {}
-local lru_pat = assert(lrucache.new(1000))
 
 ---@param path string
 ---@return string, string[]
-local function fetch_pat(path)
-  local pat = lru_pat:get(path)
-  if pat then
-    return pat[1], pat[2] -- pat, names
-  end
-  clear_tab(tmp)
-  local res = re_split(path, "/", "jo", nil, nil, tmp)
+local function fetch_pattern(path)
+  local res = re_split(path, "/", "jo")
   if not res then
     error("failed to split path")
   end
@@ -156,24 +147,22 @@ local function fetch_pat(path)
   for i, item in ipairs(res) do
     local first_byte = item:byte(1, 1)
     if first_byte == COLON_BYTE then
-      insert_tab(names, res[i]:sub(2))
+      table_insert(names, res[i]:sub(2))
       res[i] = [=[([\w\-_;:@&=!',\%\$\.\+\*\(\)]+)]=]
     elseif first_byte == INTEGER_BYTE then
-      insert_tab(names, res[i]:sub(2))
+      table_insert(names, res[i]:sub(2))
       res[i] = [[(\d+)]]
     elseif first_byte == ASTERISK_BYTE then
       local name = res[i]:sub(2)
       if name == "" then
         name = ":ext"
       end
-      insert_tab(names, name)
+      table_insert(names, name)
       -- '.' matches any character except newline
       res[i] = [=[((.|\n)*)]=]
     end
   end
-  pat = table.concat(res, [[\/]])
-  lru_pat:set(path, { pat, names }, 60 * 60)
-  return pat, names
+  return table_concat(res, [[/]]), names
 end
 
 local function match_route_method(route, method)
@@ -189,8 +178,6 @@ end
 ---@param routes? {path: string|string[], handler: any,  method?: string|string[]}[]
 ---@return Radix
 function Radix.new(routes)
-  local route_n = #routes
-
   local tree = radix_c.radix_tree_new()
   local tree_it = radix_c.radix_tree_new_it(tree)
   if tree_it == nil then
@@ -204,7 +191,10 @@ function Radix.new(routes)
     match_data = new_tab(#routes, 0),
     hash_path = new_tab(0, #routes)
   }, RadixMeta)
-
+  if routes == nil then
+    return self
+  end
+  local route_n = #routes
   -- register routes
   for i = 1, route_n do
     local route = routes[i]
@@ -227,9 +217,9 @@ end
 ---@field param boolean
 ---@field path string
 ---@field path_op string
----@field path_origin string
----@field re_names? string[]
----@field re_pat? string
+---@field origin_path string
+---@field match_names? string[]
+---@field match_pattern? string
 
 
 ---@param self Radix
@@ -239,7 +229,7 @@ end
 function Radix.insert(self, path, route)
   ---@type route_opts
   local route_opts = {
-    path_origin = path,
+    origin_path = path,
     param = false,
     handler = route.handler
   }
@@ -260,10 +250,11 @@ function Radix.insert(self, path, route)
   route_opts.method = bit_methods
 
   local pos = str_find(path, '[:#]', 1)
+  local static_prefix
   if pos then
-    path = path:sub(1, pos - 1)
+    static_prefix = path:sub(1, pos - 1)
     route_opts.path_op = "<="
-    route_opts.path = path
+    route_opts.path = static_prefix
     route_opts.param = true
   else
     pos = str_find(path, '*', 1, true)
@@ -271,30 +262,30 @@ function Radix.insert(self, path, route)
       if pos ~= #path then
         route_opts.param = true
       end
-      path = path:sub(1, pos - 1)
+      static_prefix = path:sub(1, pos - 1)
       route_opts.path_op = "<="
     else
+      static_prefix = path
       route_opts.path_op = "="
     end
-    route_opts.path = path
+    route_opts.path = static_prefix
   end
-  -- move fetch_pat to insert, why not? it's fast
+  -- move fetch_pattern to insert, why not? it's fast
   if route_opts.param then
-    route_opts.re_pat, route_opts.re_names = fetch_pat(route_opts.path_origin)
+    route_opts.match_pattern, route_opts.match_names = fetch_pattern(route_opts.origin_path)
   end
 
-  route_opts = clone_tab(route_opts)
   if route_opts.path_op == "=" then
-    self.hash_path[path] = route_opts
+    self.hash_path[static_prefix] = route_opts
     return true
   end
 
-  local data_idx = radix_c.radix_tree_find(self.tree, path, #path)
+  local data_idx = radix_c.radix_tree_find(self.tree, static_prefix, #static_prefix)
   if data_idx ~= nil then
     local idx = assert(tonumber(ffi_cast('intptr_t', data_idx)))
     local routes = self.match_data[idx]
-    if routes and routes[1].path == path then
-      insert_tab(routes, route_opts)
+    if routes and routes[1].path == static_prefix then
+      table_insert(routes, route_opts)
       return true
     end
   end
@@ -302,7 +293,7 @@ function Radix.insert(self, path, route)
   self.match_data_index = self.match_data_index + 1
   self.match_data[self.match_data_index] = { route_opts }
 
-  radix_c.radix_tree_insert(self.tree, path, #path, self.match_data_index)
+  radix_c.radix_tree_insert(self.tree, static_prefix, #static_prefix, self.match_data_index)
   return true
 end
 
@@ -338,12 +329,12 @@ function Radix.match(self, path, method)
           if not route.param then
             return handler
           end
-          local pat = route.re_pat
-          local names = route.re_names
+          local pattern = route.match_pattern
+          local names = route.match_names
           if #names == 0 then
             return handler
           end
-          local captured = re_match(path, pat, "jo")
+          local captured = re_match(path, pattern, "jo")
           if not captured then
             goto continue
           end

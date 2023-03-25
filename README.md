@@ -37,6 +37,7 @@ end
 ```
 example:
 ```lua
+local rx = Radix.new()
 local rx = Radix.new({
   { path = { "/user/:name/age/#age" }, handler = "/user/:name/age/#age", method = { 'GET', 'POST' } },
   { path = { "/user/:name" },          handler = "/user/:name" }
