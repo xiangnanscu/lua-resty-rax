@@ -1,4 +1,4 @@
--- https://github.com/xiangnan/lua-resty-rax
+-- https://github.com/xiangnanscu/lua-resty-rax
 -- derived from:
 -- https://github.com/api7/lua-resty-radixtree
 --
@@ -147,10 +147,19 @@ local function fetch_pattern(path)
   for i, item in ipairs(res) do
     local first_byte = item:byte(1, 1)
     if first_byte == COLON_BYTE then
-      table_insert(names, res[i]:sub(2))
+      local name = res[i]:sub(2)
+      if name == "" then
+        error("empty name for parameter is not allowed")
+      end
+      table_insert(names, name)
+      -- See https://www.rfc-editor.org/rfc/rfc1738.txt BNF for specific URL schemes
       res[i] = [=[([\w\-_;:@&=!',\%\$\.\+\*\(\)]+)]=]
     elseif first_byte == INTEGER_BYTE then
-      table_insert(names, res[i]:sub(2))
+      local name = res[i]:sub(2)
+      if name == "" then
+        error("empty name for parameter is not allowed")
+      end
+      table_insert(names, name)
       res[i] = [[(\d+)]]
     elseif first_byte == ASTERISK_BYTE then
       local name = res[i]:sub(2)
@@ -161,6 +170,9 @@ local function fetch_pattern(path)
       -- '.' matches any character except newline
       res[i] = [=[((.|\n)*)]=]
     end
+  end
+  if #names == 0 then
+    error("parameter character (:#*) must be preceded with /")
   end
   return table_concat(res, [[/]]), names
 end
@@ -183,7 +195,9 @@ function Radix.new(routes)
   if tree_it == nil then
     error("failed to new radixtree iterator")
   end
-
+  if routes == nil then
+    routes = {}
+  end
   local self = setmt__gc({
     tree = tree,
     tree_it = tree_it,
@@ -191,9 +205,6 @@ function Radix.new(routes)
     match_data = new_tab(#routes, 0),
     hash_path = new_tab(0, #routes)
   }, RadixMeta)
-  if routes == nil then
-    return self
-  end
   local route_n = #routes
   -- register routes
   for i = 1, route_n do
@@ -216,7 +227,6 @@ end
 ---@field method integer
 ---@field param boolean
 ---@field path string
----@field path_op string
 ---@field origin_path string
 ---@field match_names? string[]
 ---@field match_pattern? string
@@ -253,7 +263,6 @@ function Radix.insert(self, path, route)
   local static_prefix
   if pos then
     static_prefix = path:sub(1, pos - 1)
-    route_opts.path_op = "<="
     route_opts.path = static_prefix
     route_opts.param = true
   else
@@ -263,21 +272,20 @@ function Radix.insert(self, path, route)
         route_opts.param = true
       end
       static_prefix = path:sub(1, pos - 1)
-      route_opts.path_op = "<="
     else
       static_prefix = path
-      route_opts.path_op = "="
     end
     route_opts.path = static_prefix
+  end
+  if static_prefix == path then
+    self.hash_path[static_prefix] = route_opts
+    return true
   end
   -- move fetch_pattern to insert, why not? it's fast
   if route_opts.param then
     route_opts.match_pattern, route_opts.match_names = fetch_pattern(route_opts.origin_path)
-  end
-
-  if route_opts.path_op == "=" then
-    self.hash_path[static_prefix] = route_opts
-    return true
+  else
+    -- /foo/* or /foo*
   end
 
   local data_idx = radix_c.radix_tree_find(self.tree, static_prefix, #static_prefix)
@@ -327,13 +335,11 @@ function Radix.match(self, path, method)
         local handler = route.handler
         if match_route_method(route, method) then
           if not route.param then
+            -- /foo/*, /foo*
             return handler
           end
           local pattern = route.match_pattern
           local names = route.match_names
-          if #names == 0 then
-            return handler
-          end
           local captured = re_match(path, pattern, "jo")
           if not captured then
             goto continue

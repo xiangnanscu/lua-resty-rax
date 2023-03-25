@@ -44,7 +44,7 @@ local rx = Radix.new({
 })
 ```
 ## Radix.insert
-insert a route. `path` can be a static string, or params string like `/:foo`(match any string ) or `/#id`(match number string) or `/*all` (match any string including `/`). when `method` not provided, means this route matchs any method.
+insert a route. `path` can be a static string, or params string like `/:foo`(match rfc1738 string ) or `/#id`(match number string) or `/prefix/*all` (match any string including `/`). when `method` not provided, means this route matchs any method.
 ```lua
 ---@param self Radix
 ---@param path string
@@ -58,7 +58,10 @@ example:
 rx:insert("/foo", { handler = "foo" })
 rx:insert("/bar", { handler = function(request) return "bar" end, method = 'GET' })
 rx:insert("/baz", { handler = "baz", method = { "get", "post" } })
-rx:insert("/number/#id", { handler = "number" })
+rx:insert("/number/#id", { handler = "/number/#id" })
+rx:insert("/prefix/*", { handler = "/prefix/*" })
+rx:insert("/another*", { handler = "/another*" })
+rx:insert("/named_prefix/*pname", { handler = "/named_prefix/*pname" })
 ```
 ## Radix.match
 match router from a string. if `method` not provided and the route is created with method, matching will fail even if `path` matches.
@@ -82,7 +85,8 @@ rx:match("/bar", "post")  --fail
 rx:match("/baz", "GET")   --ok
 rx:match("/baz", "post")  --ok
 rx:match("/bar", "patch") --fail
-local handler, matched = rx:match("/number/5") -- ok, handler = "number", matched = {id = 5}
+local handler, matched = rx:match("/number/5") -- ok, handler = "/number/#id", matched = {id = 5}
+rx:match("/number/foo") -- fail, foo is not number
 ```
 # install
 ```sh
