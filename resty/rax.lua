@@ -86,7 +86,7 @@ end
 ---@field radix_tree_stop function
 local radix_c = load_shared_lib('librax.so')
 
-ffi_cdef [[
+ffi.cdef [[
     int memcmp(const void *s1, const void *s2, size_t n);
 
     void *radix_tree_new();
