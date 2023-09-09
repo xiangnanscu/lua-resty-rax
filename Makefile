@@ -48,4 +48,3 @@ install:
 	$(INSTALL) resty/rax.lua $(INST_LUADIR)/
 	$(INSTALL) -d $(INST_LIBDIR)/
 	$(INSTALL) $(C_SO_NAME) $(INST_LIBDIR)/
-  sed -i '' "1s/^/local C_SO_NAME = '${C_SO_NAME}'\n/" ../lualib/xodel/rax.lua
