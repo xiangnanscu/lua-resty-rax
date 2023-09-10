@@ -44,7 +44,7 @@ ${C_SO_NAME} : ${OBJS}
 ### install:      Install the library to runtime
 .PHONY: install
 install:
-	$(INSTALL) -d $(INST_LUADIR)/
-	$(INSTALL) resty/rax.lua $(INST_LUADIR)
-	$(INSTALL) -d $(INST_LIBDIR)/
-	$(INSTALL) $(C_SO_NAME) $(INST_LIBDIR)/
+	$(INSTALL) -d $(INST_LUADIR)/resty
+	$(INSTALL) resty/rax.lua $(INST_LUADIR)/resty
+	$(INSTALL) -d $(INST_LIBDIR)/resty
+	$(INSTALL) $(C_SO_NAME) $(INST_LIBDIR)/resty
