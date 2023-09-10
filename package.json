@@ -6,7 +6,7 @@
     "lib": "lib"
   },
   "scripts": {
-    "upload": "opm upload && opm clean dist",
+    "rc": "opm upload && opm clean dist",
     "commit": "git add . && git commit -am ",
     "cm": "yarn commit",
     "push": "yarn commit",
