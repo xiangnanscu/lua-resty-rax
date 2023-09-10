@@ -28,11 +28,6 @@ local table         = table
 local new_tab       = base.new_tab
 local tonumber      = tonumber
 local ipairs        = ipairs
----@class C
----@field free function
-local C             = ffi.C
-local ffi_cast      = ffi.cast
-local ffi_cdef      = ffi.cdef
 local table_insert  = table.insert
 local table_concat  = table.concat
 local string        = string
@@ -49,22 +44,32 @@ local COLON_BYTE    = string.byte(":")
 local ASTERISK_BYTE = string.byte("*")
 local INTEGER_BYTE  = string.byte("#")
 
-local function load_shared_lib()
-  local fpath
-  if ffi.os == 'OSX' then
-    fpath = 'librax.dylib'
-  else
-    fpath = 'librax.so'
+local function load_shared_lib(so_name)
+  local cpath = package.cpath
+  local tried_paths = new_tab(32, 0)
+  local i = 1
+  for k, _ in string.gmatch(cpath, "[^;]+") do
+    local fpath = string.match(k, "(.*/)")
+    fpath = fpath .. so_name
+    -- Don't get me wrong, the only way to know if a file exist is trying
+    -- to open it.
+    local f = io.open(fpath)
+    if f ~= nil then
+      io.close(f)
+      return ffi.load(fpath)
+    end
+    tried_paths[i] = fpath
+    i = i + 1
   end
-  local io_open = io.open
-  local io_close = io.close
-  local f = io_open(fpath)
-  if f ~= nil then
-    io_close(f)
-    return ffi.load(fpath)
-  end
+  error(string.format("can't find %s, tried path:", so_name, table_concat(tried_paths, ',')))
 end
 
+local so_name
+if ffi.os == 'OSX' then
+  so_name = 'librax.dylib'
+else
+  so_name = 'librax.so'
+end
 ---@class radix_c
 ---@field radix_tree_new function
 ---@field radix_tree_new_it function
@@ -74,7 +79,7 @@ end
 ---@field radix_tree_prev function
 ---@field radix_tree_search function
 ---@field radix_tree_stop function
-local radix_c = load_shared_lib()
+local radix_c = load_shared_lib(so_name)
 
 ffi.cdef [[
     int memcmp(const void *s1, const void *s2, size_t n);
@@ -280,7 +285,7 @@ function Radix.insert(self, path, route)
 
   local data_idx = radix_c.radix_tree_find(self.tree, static_prefix, #static_prefix)
   if data_idx ~= nil then
-    local idx = assert(tonumber(ffi_cast('intptr_t', data_idx)))
+    local idx = assert(tonumber(ffi.cast('intptr_t', data_idx)))
     local routes = self.match_data[idx]
     if routes and routes[1].path == static_prefix then
       table_insert(routes, route_opts)
@@ -357,7 +362,7 @@ function Radix.free(self)
   local it = self.tree_it
   if it then
     radix_c.radix_tree_stop(it)
-    C.free(it)
+    ffi.C.free(it)
     self.tree_it = nil
   end
 
