@@ -49,30 +49,20 @@ local COLON_BYTE    = string.byte(":")
 local ASTERISK_BYTE = string.byte("*")
 local INTEGER_BYTE  = string.byte("#")
 
-local function load_shared_lib(so_name)
-  local string_gmatch = string.gmatch
-  local string_match = string.match
+local function load_shared_lib()
+  local fpath
+  if ffi.os == 'OSX' then
+    fpath = 'librax.dylib'
+  else
+    fpath = 'librax.so'
+  end
   local io_open = io.open
   local io_close = io.close
-
-  local cpath = package.cpath
-  local tried_paths = new_tab(32, 0)
-  local i = 1
-
-  for k, _ in string_gmatch(cpath, "[^;]+") do
-    local fpath = string_match(k, "(.*/)")
-    fpath = fpath .. so_name
-    -- Don't get me wrong, the only way to know if a file exist is trying
-    -- to open it.
-    local f = io_open(fpath)
-    if f ~= nil then
-      io_close(f)
-      return ffi.load(fpath)
-    end
-    tried_paths[i] = fpath
-    i = i + 1
+  local f = io_open(fpath)
+  if f ~= nil then
+    io_close(f)
+    return ffi.load(fpath)
   end
-  error(string.format("can't find %s, tried path:", so_name, table_concat(tried_paths, ',')))
 end
 
 ---@class radix_c
@@ -84,7 +74,7 @@ end
 ---@field radix_tree_prev function
 ---@field radix_tree_search function
 ---@field radix_tree_stop function
-local radix_c = load_shared_lib('librax.so')
+local radix_c = load_shared_lib()
 
 ffi.cdef [[
     int memcmp(const void *s1, const void *s2, size_t n);
