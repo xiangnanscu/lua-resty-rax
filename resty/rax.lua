@@ -45,14 +45,11 @@ local ASTERISK_BYTE = string.byte("*")
 local INTEGER_BYTE  = string.byte("#")
 
 local function load_shared_lib(so_name)
-  local cpath = package.cpath
-  local tried_paths = new_tab(32, 0)
+  local tried_paths = {}
   local i = 1
-  for k, _ in string.gmatch(cpath, "[^;]+") do
+  for k, _ in string.gmatch(package.cpath, "[^;]+") do
     local fpath = string.match(k, "(.*/)")
     fpath = fpath .. so_name
-    -- Don't get me wrong, the only way to know if a file exist is trying
-    -- to open it.
     local f = io.open(fpath)
     if f ~= nil then
       io.close(f)
